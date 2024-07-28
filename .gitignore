@@ -1,0 +1,7 @@
+/Cargo.lock
+/.idea
+/target/
+/proofs/
+/.idea/modules.xml
+/.idea/solana-proofs.iml
+/.idea/vcs.xml
