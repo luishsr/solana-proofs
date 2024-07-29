@@ -15,6 +15,7 @@ use zk_proof::{generate_block_proof, str_to_fr, save_proof_to_file, save_vk_to_f
 struct TransactionProof {
     transaction_hash: String,
     proof: String,
+    input: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -42,7 +43,7 @@ fn main() {
 
     // Define the recipient and the amount to send
     let recipient = Pubkey::new_unique();
-    let amount = 1_000_000; // 1 SOL in lamports
+    let amount = 1_000; // 1 SOL in lamports
 
     // Create a transfer instruction
     let transfer_instruction = system_instruction::transfer(&fee_payer.pubkey(), &recipient, amount);
@@ -90,12 +91,12 @@ fn get_transaction_status(rpc_client: &RpcClient, signature: &Signature) {
 
                 // Generate zk-proof for the confirmed transaction
                 if let Some(tx_hash_fr) = str_to_fr(&signature.to_string()) {
-                    let (proof, vk) = generate_block_proof(tx_hash_fr, vec![tx_hash_fr]);
+                    let (proof, vk, input) = generate_block_proof(tx_hash_fr, vec![tx_hash_fr]);
                     println!("Generated zk-proof: {}", proof);
 
                     // Save the proof and vk to a file
-                    save_proof_to_file(&signature.to_string(), &proof);
-                    save_vk_to_file(&vk);
+                    save_proof_to_file(&signature.to_string(), &proof, &input);
+                    save_vk_to_file(&signature.to_string(), &vk);
                 } else {
                     println!("Error converting transaction hash to field element");
                 }

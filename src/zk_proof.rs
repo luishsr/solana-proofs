@@ -13,6 +13,7 @@ use solana_sdk::bs58::encode;
 pub struct TransactionProof {
     pub transaction_hash: String,
     pub proof: String,
+    pub input: Vec<String>,
 }
 
 pub struct BlockCircuit {
@@ -40,7 +41,7 @@ impl Circuit<Fr> for BlockCircuit {
         let result_hash = hasher.finalize();
         let mut result_hash_bytes = [0u8; 32];
         result_hash_bytes.copy_from_slice(&result_hash);
-        let result_hash_fr = Fr::from_repr(result_hash_bytes).unwrap_or_else(||Fr::ZERO);
+        let result_hash_fr = Fr::from_repr(result_hash_bytes).unwrap_or_else(|| Fr::ZERO);
 
         // Constrain the computed hash to be equal to the given block hash
         cs.enforce(
@@ -54,7 +55,7 @@ impl Circuit<Fr> for BlockCircuit {
     }
 }
 
-pub fn generate_block_proof(block_hash: Fr, transaction_hashes: Vec<Fr>) -> (String, String) {
+pub fn generate_block_proof(block_hash: Fr, transaction_hashes: Vec<Fr>) -> (String, String, Vec<String>) {
     let circuit = BlockCircuit {
         block_hash: Some(block_hash),
         transaction_hashes: transaction_hashes.iter().map(|&x| Some(x)).collect(),
@@ -75,8 +76,9 @@ pub fn generate_block_proof(block_hash: Fr, transaction_hashes: Vec<Fr>) -> (Str
     let vk_bytes = serialize_vk(&params.vk);
 
     let proof_str = format!("{:?}", proof);
+    let input_data: Vec<String> = transaction_hashes.iter().map(|fr| fr.to_string()).collect();
 
-    (proof_str, vk_bytes)
+    (proof_str, vk_bytes, input_data)
 }
 
 pub(crate) fn str_to_fr(data: &str) -> Option<Fr> {
@@ -85,10 +87,10 @@ pub(crate) fn str_to_fr(data: &str) -> Option<Fr> {
     let mut hash_bytes = [0u8; 32];
     hash_bytes.copy_from_slice(&hash);
     println!("Converting hash to field element: {:?}", hash_bytes);
-    Some(Fr::from_repr(hash_bytes).unwrap_or_else(||Fr::ZERO))
+    Some(Fr::from_repr(hash_bytes).unwrap_or_else(|| Fr::ZERO))
 }
 
-pub fn save_proof_to_file(transaction_hash: &str, proof: &str) {
+pub fn save_proof_to_file(transaction_hash: &str, proof: &str, input: &[String]) {
     let proofs_dir = Path::new("proofs");
     if !proofs_dir.exists() {
         std::fs::create_dir(proofs_dir).expect("Unable to create proofs directory");
@@ -98,6 +100,7 @@ pub fn save_proof_to_file(transaction_hash: &str, proof: &str) {
     let json_data = serde_json::json!({
         "transaction_hash": transaction_hash,
         "proof": proof,
+        "input": input,
     });
     let json_string = serde_json::to_string_pretty(&json_data).expect("Unable to serialize proof");
 
@@ -106,9 +109,12 @@ pub fn save_proof_to_file(transaction_hash: &str, proof: &str) {
     println!("Saved proof to {:?}", file_name);
 }
 
-
-pub fn save_vk_to_file(vk_string: &str) {
-    let file_name = Path::new("proofs/verification_key.json");
+pub fn save_vk_to_file(transaction_hash: &str, vk_string: &str) {
+    let proofs_dir = Path::new("proofs");
+    if !proofs_dir.exists() {
+        std::fs::create_dir(proofs_dir).expect("Unable to create proofs directory");
+    }
+    let file_name = proofs_dir.join(format!("proof_{}_vk.json", transaction_hash));
     let mut file = File::create(&file_name).expect("Unable to create file");
 
     let json_data = serde_json::json!({
