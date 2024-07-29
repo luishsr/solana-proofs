@@ -1,9 +1,29 @@
 {
+  "name": "hardhat-project",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-ignition-ethers": "^0.15.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.11",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.8",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^22.0.0",
+    "chai": "^5.1.1",
+    "ethers": "^6.13.2",
+    "hardhat": "^2.22.6",
+    "hardhat-gas-reporter": "^2.2.0",
+    "install": "^0.13.0",
+    "npm": "^10.8.2",
+    "solidity-coverage": "^0.8.12",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.2",
+    "typescript": "^5.5.4"
+  },
   "dependencies": {
-    "@openzeppelin/test-helpers": "^0.5.16",
-    "@truffle/hdwallet-provider": "^2.1.15",
-    "elliptic": "^6.5.6",
-    "fs": "^0.0.1-security",
     "web3": "^4.11.1"
   }
 }

@@ -92,7 +92,7 @@ fn get_transaction_status(rpc_client: &RpcClient, signature: &Signature) {
                 // Generate zk-proof for the confirmed transaction
                 if let Some(tx_hash_fr) = str_to_fr(&signature.to_string()) {
                     let (proof, vk, input) = generate_block_proof(tx_hash_fr, vec![tx_hash_fr]);
-                    println!("Generated zk-proof: {}", proof);
+                    println!("Generated zk-proof: {:?}", proof);
 
                     // Save the proof and vk to a file
                     save_proof_to_file(&signature.to_string(), &proof, &input);

@@ -1,14 +1,14 @@
 const Verifier = artifacts.require("Verifier");
 const fs = require('fs');
 const path = require('path');
-const BN = web3.utils.BN;
+const Web3 = require('web3');
 
 contract('Verifier', accounts => {
     it('should verify all proofs', async () => {
         const verifier = await Verifier.deployed();
 
         // Load all files in the proofs directory
-        const proofsDir = path.join(__dirname, '../../proofs');
+        const proofsDir = path.join(__dirname, '../proofs');
         const files = fs.readdirSync(proofsDir);
 
         // Filter verification key files
@@ -37,32 +37,32 @@ contract('Verifier', accounts => {
             console.log("Decoded Verification Key: ", vkDecoded);
 
             // Prepare the verification key parameters
-            const alpha = [new BN(vkDecoded.slice(0, 32)), new BN(vkDecoded.slice(32, 64))];
+            const alpha = [new web3.utils.BN(vkDecoded.slice(0, 32)), new web3.utils.BN(vkDecoded.slice(32, 64))];
             console.log("Alpha: ", alpha);
 
             const beta = [
-                [new BN(vkDecoded.slice(64, 96)), new BN(vkDecoded.slice(96, 128))],
-                [new BN(vkDecoded.slice(128, 160)), new BN(vkDecoded.slice(160, 192))]
+                [new web3.utils.BN(vkDecoded.slice(64, 96)), new web3.utils.BN(vkDecoded.slice(96, 128))],
+                [new web3.utils.BN(vkDecoded.slice(128, 160)), new web3.utils.BN(vkDecoded.slice(160, 192))]
             ];
             console.log("Beta: ", beta);
 
             const gamma = [
-                [new BN(vkDecoded.slice(192, 224)), new BN(vkDecoded.slice(224, 256))],
-                [new BN(vkDecoded.slice(256, 288)), new BN(vkDecoded.slice(288, 320))]
+                [new web3.utils.BN(vkDecoded.slice(192, 224)), new web3.utils.BN(vkDecoded.slice(224, 256))],
+                [new web3.utils.BN(vkDecoded.slice(256, 288)), new web3.utils.BN(vkDecoded.slice(288, 320))]
             ];
             console.log("Gamma: ", gamma);
 
             const delta = [
-                [new BN(vkDecoded.slice(320, 352)), new BN(vkDecoded.slice(352, 384))],
-                [new BN(vkDecoded.slice(384, 416)), new BN(vkDecoded.slice(416, 448))]
+                [new web3.utils.BN(vkDecoded.slice(320, 352)), new web3.utils.BN(vkDecoded.slice(352, 384))],
+                [new web3.utils.BN(vkDecoded.slice(384, 416)), new web3.utils.BN(vkDecoded.slice(416, 448))]
             ];
             console.log("Delta: ", delta);
 
             const gamma_abc = [];
             for (let i = 448; i < vkDecoded.length; i += 64) {
                 gamma_abc.push([
-                    new BN(vkDecoded.slice(i, i + 32)),
-                    new BN(vkDecoded.slice(i + 32, i + 64))
+                    new web3.utils.BN(vkDecoded.slice(i, i + 32)),
+                    new web3.utils.BN(vkDecoded.slice(i + 32, i + 64))
                 ]);
             }
             console.log("Gamma ABC: ", gamma_abc);
@@ -80,28 +80,43 @@ contract('Verifier', accounts => {
                 return;
             }
 
-            // Parse proof string
-            const proofString = proofData.proof;
-            console.log("Proof String: ", proofString);
-            const proofRegex = /0x[0-9a-f]+/g;
-            const proofHex = proofString.match(proofRegex);
-            console.log("Proof Hex Array: ", proofHex);
-
-            // Prepare the proof parameters
-            const proof = {
-                a: [new BN(proofHex[0], 16), new BN(proofHex[1], 16)],
-                b: [
-                    [new BN(proofHex[2], 16), new BN(proofHex[3], 16)],
-                    [new BN(proofHex[4], 16), new BN(proofHex[5], 16)]
-                ],
-                c: [new BN(proofHex[6], 16), new BN(proofHex[7], 16)]
+            // Validate proof data size
+            const validateSize = (bnArray, maxSize) => {
+                return bnArray.every(bn => bn.byteLength() <= maxSize);
             };
+
+            const maxSize = 32; // 32 bytes = 256 bits
+
+            const proof = {
+                a: [new web3.utils.BN(proofData.proof.a[0], 16), new web3.utils.BN(proofData.proof.a[1], 16)],
+                b: [
+                    [new web3.utils.BN(proofData.proof.b[0][0], 16), new web3.utils.BN(proofData.proof.b[0][1], 16)],
+                    [new web3.utils.BN(proofData.proof.b[1][0], 16), new web3.utils.BN(proofData.proof.b[1][1], 16)]
+                ],
+                c: [new web3.utils.BN(proofData.proof.c[0], 16), new web3.utils.BN(proofData.proof.c[1], 16)]
+            };
+
+            // Check if any proof parameter exceeds the max size
+            if (!validateSize(proof.a, maxSize) || !validateSize(proof.b.flat(), maxSize) || !validateSize(proof.c, maxSize)) {
+                console.error("Error: Proof parameters exceed maximum allowed size.");
+                console.log("Proof 'a' sizes:", proof.a.map(p => p.byteLength()));
+                console.log("Proof 'b' sizes:", proof.b.flat().map(p => p.byteLength()));
+                console.log("Proof 'c' sizes:", proof.c.map(p => p.byteLength()));
+                return;
+            }
+
             console.log("Proof: ", proof);
 
             // Extracting actual inputs from the proof file
             console.log("Extracting actual inputs from the proof file...");
-            const input = proofData.input.map(value => new BN(value, 16));
+            const input = proofData.input.map(value => new web3.utils.BN(value, 16));
             console.log("Input: ", input);
+
+            if (!validateSize(input, maxSize)) {
+                console.error("Error: Input parameters exceed maximum allowed size.");
+                console.log("Input sizes:", input.map(p => p.byteLength()));
+                return;
+            }
 
             // Call the verification function
             console.log("Calling the verification function...");

@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use ff::{Field, PrimeField};
+use serde_json::json;
 use solana_sdk::bs58::encode;
 
 #[derive(Serialize, Deserialize)]
@@ -33,7 +34,7 @@ impl Circuit<Fr> for BlockCircuit {
         let mut hasher = Sha256::new();
         for tx_hash in self.transaction_hashes.iter() {
             if let Some(hash) = tx_hash {
-                hasher.update(hash.to_repr());
+                hasher.update(hash.to_bytes_be());
             }
         }
 
@@ -55,7 +56,7 @@ impl Circuit<Fr> for BlockCircuit {
     }
 }
 
-pub fn generate_block_proof(block_hash: Fr, transaction_hashes: Vec<Fr>) -> (String, String, Vec<String>) {
+pub fn generate_block_proof(block_hash: Fr, transaction_hashes: Vec<Fr>) -> (groth16::Proof<Bls12>, String, Vec<Fr>) {
     let circuit = BlockCircuit {
         block_hash: Some(block_hash),
         transaction_hashes: transaction_hashes.iter().map(|&x| Some(x)).collect(),
@@ -71,14 +72,21 @@ pub fn generate_block_proof(block_hash: Fr, transaction_hashes: Vec<Fr>) -> (Str
     };
 
     let proof = groth16::create_random_proof(circuit, &params, &mut rng).unwrap();
-
-    let _proof_bytes = serialize_proof(&proof);
     let vk_bytes = serialize_vk(&params.vk);
 
-    let proof_str = format!("{:?}", proof);
-    let input_data: Vec<String> = transaction_hashes.iter().map(|fr| fr.to_string()).collect();
+    let proof_a_size = bincode::serialize(&proof.a).unwrap().len();
+    let proof_b_size = bincode::serialize(&proof.b).unwrap().len();
+    let proof_c_size = bincode::serialize(&proof.c).unwrap().len();
+    println!("Proof 'a' size: {} bytes", proof_a_size);
+    println!("Proof 'b' size: {} bytes", proof_b_size);
+    println!("Proof 'c' size: {} bytes", proof_c_size);
 
-    (proof_str, vk_bytes, input_data)
+    //let proof_bytes = bincode::serialize(&proof).unwrap();
+    //println!("Total proof size: {} bytes", proof_bytes.len());
+
+    //let input = vec![block_hash];
+
+    (proof, vk_bytes, transaction_hashes)
 }
 
 pub(crate) fn str_to_fr(data: &str) -> Option<Fr> {
@@ -90,23 +98,50 @@ pub(crate) fn str_to_fr(data: &str) -> Option<Fr> {
     Some(Fr::from_repr(hash_bytes).unwrap_or_else(|| Fr::ZERO))
 }
 
-pub fn save_proof_to_file(transaction_hash: &str, proof: &str, input: &[String]) {
+pub fn save_proof_to_file(transaction_hash: &str, proof: &groth16::Proof<Bls12>, input: &[Fr]) {
     let proofs_dir = Path::new("proofs");
     if !proofs_dir.exists() {
         std::fs::create_dir(proofs_dir).expect("Unable to create proofs directory");
     }
     let file_name = proofs_dir.join(format!("proof_{}.json", transaction_hash));
     let mut file = File::create(&file_name).expect("Unable to create file");
-    let json_data = serde_json::json!({
-        "transaction_hash": transaction_hash,
-        "proof": proof,
-        "input": input,
+
+    let input_data: Vec<String> = input.iter().map(|fr| format!("0x{}", to_hex_string(fr.to_bytes_be()))).collect();
+
+    let json_data = json!({
+        "input": input_data,
+        "proof": {
+            "a": [
+                format!("0x{}", to_hex_string(proof.a.x().to_bytes_be())),
+                format!("0x{}", to_hex_string(proof.a.y().to_bytes_be()))
+            ],
+            "b": [
+                [
+                    format!("0x{}", to_hex_string(proof.b.x().c0().to_bytes_be())),
+                    format!("0x{}", to_hex_string(proof.b.x().c1().to_bytes_be()))
+                ],
+                [
+                    format!("0x{}", to_hex_string(proof.b.y().c0().to_bytes_be())),
+                    format!("0x{}", to_hex_string(proof.b.y().c1().to_bytes_be()))
+                ]
+            ],
+            "c": [
+                format!("0x{}", to_hex_string(proof.c.x().to_bytes_be())),
+                format!("0x{}", to_hex_string(proof.c.y().to_bytes_be()))
+            ]
+        },
+        "transaction_hash": transaction_hash
     });
+
     let json_string = serde_json::to_string_pretty(&json_data).expect("Unable to serialize proof");
 
     file.write_all(json_string.as_bytes()).expect("Unable to write data to file");
 
     println!("Saved proof to {:?}", file_name);
+}
+
+fn to_hex_string(bytes: impl AsRef<[u8]>) -> String {
+    bytes.as_ref().iter().map(|b| format!("{:02x}", b)).collect::<String>()
 }
 
 pub fn save_vk_to_file(transaction_hash: &str, vk_string: &str) {
@@ -125,12 +160,6 @@ pub fn save_vk_to_file(transaction_hash: &str, vk_string: &str) {
     file.write_all(json_string.as_bytes()).expect("Unable to write data to file");
 
     println!("Saved verifying key to {:?}", file_name);
-}
-
-fn serialize_proof(proof: &groth16::Proof<Bls12>) -> Vec<u8> {
-    let mut proof_bytes = vec![];
-    proof.write(&mut proof_bytes).unwrap();
-    proof_bytes
 }
 
 fn serialize_vk(vk: &groth16::VerifyingKey<Bls12>) -> String {
